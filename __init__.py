@@ -1,1 +1,2 @@
-from deepnet import *
+from deepnet import rbm
+from deepnet import dbn
