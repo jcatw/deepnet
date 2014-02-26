@@ -1,5 +1,11 @@
+"""
+A simple implementation of binary deep belief networks as stacked
+restricted boltzmann machines.
+"""
 import numpy as np
 import numpy.random as nprand
+import copy
+import pdb
 
 def binary_rand(n):
     return nprand.randint(0,2,n)
@@ -96,20 +102,106 @@ class dbn:
         self.n_vars = [n_visible]
         self.n_vars.extend(n_hidden_list)
         self.rbms = []
+        self.rbms_up = []
+        self.rbms_down = []
         self.n_rbms = self.n_layers - 1
 
-    def fit(self, x, n_iterations=100, n_chains = 100, alpha=0.05, lamb=0.05):
+    def fit(self, x, backfit_iterations=100, backfit_rate = 0.001, backfit_gibbs_iterations = 10, n_iterations=100, n_chains = 100, alpha=0.05, lamb=0.05):
+        n_instances = x.shape[0]
         bottom_data = x
+
+        # fit the restricted boltzmann machines
         for i in xrange(self.n_layers-1):
             an_rbm = rbm(self.n_vars[i],self.n_vars[i+1])
             an_rbm.fit(bottom_data, n_iterations, n_chains, alpha, lamb)
             self.rbms.append(an_rbm)
             bottom_data = probs_to_binary(upsample(an_rbm, bottom_data), an_rbm.dtype)
 
+        # untie weights and backfit
+        ## init untied rbms
+        for i in xrange(self.n_rbms - 1):
+            self.rbms_up.append(copy.deepcopy(self.rbms[i]))
+            self.rbms_down.append(copy.deepcopy(self.rbms[i]))
+            
+        ## backfit
+        for iteration in xrange(backfit_iterations):
+            up_states = [x]
+            #up_probs = [downsample(self.rbms_down[0],x)]
+            up_probs = [None]
+            down_states = []
+            down_probs = []
+            
+            ## 'wake'
+            bottom_data = x
+            for i in xrange(self.n_rbms-1):
+                # get prob, state one level up
+                up_prob = upsample(self.rbms_up[i],bottom_data)
+                up_probs.append(up_prob)
+                bottom_data = probs_to_binary(up_prob, self.rbms_up[i].dtype)
+                up_states.append(bottom_data)
+            
+                # copy the rbm while we are here
+                # wrong, fix
+                #rbm_up = copy.deepcopy(self.rbms[i])
+                #self.rbms_up.append(rbm_up)
+
+            up_probs[0] = downsample(self.rbms_down[0],up_states[1])
+            
+            ## top level
+            # this breaks the chain interface a little, could be cleaned up
+            #   n_instances chains with no burn-in and burn-interval bi =>
+            #   constrastive divergence with bi steps
+            top_chains = chains(self.rbms[-1], n_instances)
+            top_chains.h = up_states[-1]  # start the chains at the topmost upsampled states
+            top_chains.update_x(self.rbms[-1])  # set the penultimate layer
+            # alternating-gibbs-sample for n_iterations
+            for k in xrange(n_iterations):
+                top_chains.update_h(self.rbms[-1])
+                top_chains.update_x(self.rbms[-1])
+            # record the final states and activations (probabilities)
+            down_states.append(top_chains.h)
+            down_states.append(top_chains.x)
+            down_probs.append(upsample(self.rbms[-1],top_chains.x))
+            down_probs.append(downsample(self.rbms[-1],top_chains.h))
+            
+            ## 'sleep'
+            top_data = down_states[1]
+            for i in xrange(self.n_rbms-2,-1,-1):
+                down_prob = downsample(self.rbms_down[i], top_data)
+                down_probs.append(down_prob)
+                top_data = probs_to_binary(down_prob, self.rbms_down[i].dtype)
+                down_states.append(top_data)
+            down_states.reverse()
+            down_probs.reverse()
+
+            #pdb.set_trace()
+            ## parameter updates
+            for i in xrange(self.n_rbms-1):
+                # 'generative' parameters
+                #self.rbms_down[i].W += backfit_rate * np.outer(up_states[i+1],
+                #                                               (up_states[i] - up_probs[i]))
+                #self.rbms_down[i].W += (backfit_rate * up_states[i+1].T.dot((up_states[i] - up_probs[i]))).T
+                self.rbms_down[i].W += (backfit_rate * 
+                                        up_states[i+1].T.dot((up_states[i] - 
+                                                              downsample(self.rbms_down[i],up_states[i+1])))).T
+                #                                               
+                # 'receptive' parameters
+                #self.rbms_up[i].W += backfit_rate * np.outer(down_states[i],
+                #                                             (down_states[i+1] - down_probs[i+1]))
+                #self.rbms_up[i].W += backfit_rate * down_states[i].T.dot((down_states[i+1] - down_probs[i+1]))
+                self.rbms_up[i].W += (backfit_rate * 
+                                      down_states[i].T.dot((down_states[i+1] - 
+                                                            upsample(self.rbms_up[i],down_states[i]))))
+            # top level parameters
+            #self.rbms[-1].W += backfit_rate * (np.outer(up_states[-2], up_states[-1]) - 
+            #                                   np.outer(down_states[-2], down_states[-1]))
+            self.rbms[-1].W += backfit_rate * (up_states[-2].T.dot(up_states[-1]) - 
+                                               down_states[-2].T.dot(down_states[-1]))
+
     def sample(self, n_samples, n_chains, burn_in = 10, burn_interval = 5):
         layer_samples = self.rbms[-1].sample(n_samples, n_chains, burn_in, burn_interval)
         for i in xrange(self.n_rbms-2,-1,-1):
-            layer_samples = probs_to_binary(downsample(self.rbms[i], layer_samples), self.rbms[i].dtype)
+            layer_samples = probs_to_binary(downsample(self.rbms_down[i], layer_samples), self.rbms_down[i].dtype)
                                                  
         return layer_samples
             
