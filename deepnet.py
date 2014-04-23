@@ -79,7 +79,7 @@ class rbm:
                                 (g_minus / n_chains) - 
                                 (lamb * self.W) )
 
-    def sample(self, n_samples, n_chains, burn_in = 10, burn_interval = 5):
+    def sample(self, n_samples, n_chains = 1, burn_in = 10, burn_interval = 5):
         assert(n_samples % n_chains == 0)
         markov_chains = chains(self, n_chains)
         samples = np.zeros((n_samples, self.n_visible))
@@ -198,7 +198,7 @@ class dbn:
             self.rbms[-1].W += backfit_rate * (up_states[-2].T.dot(up_states[-1]) - 
                                                down_states[-2].T.dot(down_states[-1]))
 
-    def sample(self, n_samples, n_chains, burn_in = 10, burn_interval = 5):
+    def sample(self, n_samples, n_chains = 1, burn_in = 10, burn_interval = 5):
         layer_samples = self.rbms[-1].sample(n_samples, n_chains, burn_in, burn_interval)
         for i in xrange(self.n_rbms-2,-1,-1):
             layer_samples = probs_to_binary(downsample(self.rbms_down[i], layer_samples), self.rbms_down[i].dtype)
