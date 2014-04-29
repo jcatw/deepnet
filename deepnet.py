@@ -106,7 +106,13 @@ class dbn:
         self.rbms_down = []
         self.n_rbms = self.n_layers - 1
 
+    def reset(self):
+        self.rbms = []
+        self.rbms_up = []
+        self.rbms_down = []
+
     def fit(self, x, backfit_iterations=100, backfit_rate = 0.001, backfit_gibbs_iterations = 10, n_iterations=100, n_chains = 100, alpha=0.05, lamb=0.05):
+        self.reset()
         n_instances = x.shape[0]
         bottom_data = x
 
