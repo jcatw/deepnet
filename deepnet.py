@@ -31,13 +31,6 @@ class chains:
         self.x = binary_rand((self.n_chains,self.n_visible)).astype(self.dtype)
         self.update_h(rbm)
         
-
-    #def upsample(self, rbm):
-    #    return self.x.dot(rbm.W)
-
-    #def downsample(self, rbm):
-    #    return self.h.dot(rbm.W.T)
-
     def update_x(self, rbm):
         downsampled = downsample(rbm, self.h)
         self.x = (nprand.uniform(0., 1., downsampled.shape) < downsampled).astype(self.dtype)
@@ -83,13 +76,6 @@ class rbm:
         assert(n_samples % n_chains == 0)
         markov_chains = chains(self, n_chains)
         samples = np.zeros((n_samples, self.n_visible))
-        #if not initial_states is None:
-        #    if begin_visible:
-        #        assert(initial_states.shape == (n_samples, self.n_visible))
-        #        markov_chains.x = initial_states
-        #    else:
-        #        assert(initial_states.shape == (n_samples, self.n_hidden))
-        #        markov_chains.h = initial_states
         n_samples_per_chain = n_samples / n_chains
         samples[:n_chains] = markov_chains.alternating_gibbs(self,burn_in)
         for i in xrange(1,n_samples_per_chain):
@@ -132,7 +118,6 @@ class dbn:
         ## backfit
         for iteration in xrange(backfit_iterations):
             up_states = [x]
-            #up_probs = [downsample(self.rbms_down[0],x)]
             up_probs = [None]
             down_states = []
             down_probs = []
@@ -145,17 +130,14 @@ class dbn:
                 up_probs.append(up_prob)
                 bottom_data = probs_to_binary(up_prob, self.rbms_up[i].dtype)
                 up_states.append(bottom_data)
-            
-                # copy the rbm while we are here
-                # wrong, fix
-                #rbm_up = copy.deepcopy(self.rbms[i])
-                #self.rbms_up.append(rbm_up)
 
+            # topmost state
             up_prob = upsample(self.rbms[-1],bottom_data)
             up_probs.append(up_prob)
             bottom_data = probs_to_binary(up_prob, self.rbms[-1].dtype)
             up_states.append(bottom_data)
 
+            # bottommost state
             up_probs[0] = downsample(self.rbms_down[0],up_states[1])
             
             ## top level
@@ -164,8 +146,6 @@ class dbn:
             #   constrastive divergence with bi steps
             top_chains = chains(self.rbms[-1], n_instances)
             # start the chains at the topmost upsampled states
-            #top_chains.h = probs_to_binary(upsample(self.rbms[-1],up_states[-1]),
-            #                               self.rbms[-1].dtype)
             top_chains.h = up_states[-1]
             top_chains.update_x(self.rbms[-1])  # set the penultimate layer
             # alternating-gibbs-sample for n_iterations
@@ -192,23 +172,15 @@ class dbn:
             ## parameter updates
             for i in xrange(self.n_rbms-1):
                 # 'generative' parameters
-                #self.rbms_down[i].W += backfit_rate * np.outer(up_states[i+1],
-                #                                               (up_states[i] - up_probs[i]))
-                #self.rbms_down[i].W += (backfit_rate * up_states[i+1].T.dot((up_states[i] - up_probs[i]))).T
                 self.rbms_down[i].W += (backfit_rate * 
                                         up_states[i+1].T.dot((up_states[i] - 
                                                               downsample(self.rbms_down[i],up_states[i+1])))).T
-                #                                               
+                
                 # 'receptive' parameters
-                #self.rbms_up[i].W += backfit_rate * np.outer(down_states[i],
-                #                                             (down_states[i+1] - down_probs[i+1]))
-                #self.rbms_up[i].W += backfit_rate * down_states[i].T.dot((down_states[i+1] - down_probs[i+1]))
                 self.rbms_up[i].W += (backfit_rate * 
                                       down_states[i].T.dot((down_states[i+1] - 
                                                             upsample(self.rbms_up[i],down_states[i]))))
             # top level parameters
-            #self.rbms[-1].W += backfit_rate * (np.outer(up_states[-2], up_states[-1]) - 
-            #                                   np.outer(down_states[-2], down_states[-1]))
             self.rbms[-1].W += backfit_rate * (up_states[-2].T.dot(up_states[-1]) - 
                                                down_states[-2].T.dot(down_states[-1]))
 
@@ -218,4 +190,3 @@ class dbn:
             layer_samples = probs_to_binary(downsample(self.rbms_down[i], layer_samples), self.rbms_down[i].dtype)
                                                  
         return layer_samples
-            
