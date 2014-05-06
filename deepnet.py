@@ -151,6 +151,11 @@ class dbn:
                 #rbm_up = copy.deepcopy(self.rbms[i])
                 #self.rbms_up.append(rbm_up)
 
+            up_prob = upsample(self.rbms[-1],bottom_data)
+            up_probs.append(up_prob)
+            bottom_data = probs_to_binary(up_prob, self.rbms[-1].dtype)
+            up_states.append(bottom_data)
+
             up_probs[0] = downsample(self.rbms_down[0],up_states[1])
             
             ## top level
@@ -158,7 +163,10 @@ class dbn:
             #   n_instances chains with no burn-in and burn-interval bi =>
             #   constrastive divergence with bi steps
             top_chains = chains(self.rbms[-1], n_instances)
-            top_chains.h = up_states[-1]  # start the chains at the topmost upsampled states
+            # start the chains at the topmost upsampled states
+            #top_chains.h = probs_to_binary(upsample(self.rbms[-1],up_states[-1]),
+            #                               self.rbms[-1].dtype)
+            top_chains.h = up_states[-1]
             top_chains.update_x(self.rbms[-1])  # set the penultimate layer
             # alternating-gibbs-sample for n_iterations
             for k in xrange(n_iterations):
