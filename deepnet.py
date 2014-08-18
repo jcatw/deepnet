@@ -23,6 +23,9 @@ def probs_to_binary(probs, dtype):
     return (nprand.uniform(0., 1., probs.shape) < probs).astype(dtype)
 
 class chains:
+    '''
+    This class encapsulates a set of Markov chains running over an RBM layer.
+    '''
     def __init__(self, rbm, n_chains):
         self.n_chains  = n_chains
         self.n_visible = rbm.n_visible
@@ -32,16 +35,25 @@ class chains:
         self.update_h(rbm)
         
     def update_x(self, rbm):
+        '''
+        Sample visible variables given hidden.
+        '''
         downsampled = downsample(rbm, self.h)
         self.x = (nprand.uniform(0., 1., downsampled.shape) < downsampled).astype(self.dtype)
         return self.x
 
     def update_h(self, rbm):
+        '''
+        Sample hidden variables given visible.
+        '''
         upsampled = upsample(rbm, self.x)
         self.h = (nprand.uniform(0., 1., upsampled.shape) < upsampled).astype(self.dtype)
         return self.h
 
     def alternating_gibbs(self, rbm, n):
+        '''
+        Perform n steps of alternating Gibbs sampling for a given RBM.
+        '''
         for i in xrange(n):
             self.update_h(rbm)
             self.update_x(rbm)
@@ -50,12 +62,18 @@ class chains:
 
 class rbm:
     def __init__(self, n_visible, n_hidden, dtype = np.dtype('int8')):
+        '''
+        Initialize a Restricted Boltzmann Machine with n_visible visible variables and n_hidden hidden variables.
+        '''
         self.n_visible = n_visible
         self.n_hidden = n_hidden
         self.W = np.zeros((n_visible, n_hidden))
         self.dtype = dtype
 
     def fit(self, x, n_iterations=100, n_chains = 100, alpha=0.05, lamb=0.05):
+        '''
+        Fit an RBM given a design matrix x.
+        '''
         n_instances, n_visible = x.shape
         assert(n_visible == self.n_visible)
 
@@ -73,6 +91,12 @@ class rbm:
                                 (lamb * self.W) )
 
     def sample(self, n_samples, n_chains = 1, burn_in = 10, burn_interval = 5):
+        '''Sample n_samples instances from a fit RBM using n_chains parallel
+        Markov chains.  burn_in and burn_interval represent the
+        initial number of dropped samples and interval of accepted
+        samples, respectively.
+        '''
+        
         assert(n_samples % n_chains == 0)
         markov_chains = chains(self, n_chains)
         samples = np.zeros((n_samples, self.n_visible))
@@ -84,6 +108,10 @@ class rbm:
             
 class dbn:
     def __init__(self,n_visible,n_hidden_list):
+        '''
+        Initialize a DBN with n_visible hidden variables.  n_hidden_list defines the number of latent layers and their dimensionality.  For instance, to define a DBN with 1000 visible variables and 3 layers with 100 variables each, call dbn(1000, [100,100,100]).
+        '''
+        
         self.n_layers = len(n_hidden_list) + 1
         self.n_vars = [n_visible]
         self.n_vars.extend(n_hidden_list)
@@ -93,11 +121,17 @@ class dbn:
         self.n_rbms = self.n_layers - 1
 
     def reset(self):
+        '''
+        'Unlearn' the dbn by resetting the constituent restricted botzmann machines.
+        '''
         self.rbms = []
         self.rbms_up = []
         self.rbms_down = []
 
     def fit(self, x, backfit_iterations=100, backfit_rate = 0.001, backfit_gibbs_iterations = 10, n_iterations=100, n_chains = 100, alpha=0.05, lamb=0.05):
+        '''
+        Fit a DBN via stochastic maximum likelihood followed by backfitting.
+        '''
         self.reset()
         n_instances = x.shape[0]
         bottom_data = x
@@ -185,6 +219,9 @@ class dbn:
                                                down_states[-2].T.dot(down_states[-1]))
 
     def sample(self, n_samples, n_chains = 1, burn_in = 10, burn_interval = 5):
+        '''
+        Sample n_samples samples from a fit DBN.
+        '''
         layer_samples = self.rbms[-1].sample(n_samples, n_chains, burn_in, burn_interval)
         for i in xrange(self.n_rbms-2,-1,-1):
             layer_samples = probs_to_binary(downsample(self.rbms_down[i], layer_samples), self.rbms_down[i].dtype)

@@ -1,0 +1,13 @@
+* Deepnet: Simple Unsupervised Binary Deep Belief Networks
+	Deepnet is a simple implementation of binary deep belief networks
+	built on top of numpy.  The focus is on unsupervised generative
+	learning, so there is no 'predict' method, only a 'sample' method.
+
+** Usage
+	 >>> import numpy as np
+	 >>> import deepnet
+	 >>> X = np.random.rand(30, 200)
+	 >>> dbn = deepnet.dbn(30, [100, 100])
+	 >>> dbn.fit(X)
+	 >>> dbn.sample(10)
+	 
