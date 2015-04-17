@@ -5,6 +5,7 @@ restricted boltzmann machines.
 import numpy as np
 import numpy.random as nprand
 import copy
+from scipy.optimize import minimize
 import pdb
 
 def binary_rand(n):
@@ -177,7 +178,7 @@ class dbn:
             ## top level
             # this breaks the chain interface a little, could be cleaned up
             #   n_instances chains with no burn-in and burn-interval bi =>
-            #   constrastive divergence with bi steps
+            #   contrastive divergence with bi steps
             top_chains = chains(self.rbms[-1], n_instances)
             # start the chains at the topmost upsampled states
             top_chains.h = up_states[-1]
@@ -227,3 +228,22 @@ class dbn:
             layer_samples = probs_to_binary(downsample(self.rbms_down[i], layer_samples), self.rbms_down[i].dtype)
                                                  
         return layer_samples
+
+    def activations(self, x):
+        """Compute the top-level activations given an input vector."""
+
+        activs = x
+        for i in range(self.n_rbms - 1):
+            activs = upsample(self.rbms_up[i], activs)
+        activs = upsample(self.rbms[-1], activs)
+        return activs
+
+    def optimal_input(self, index):
+        if index < 0 or index > self.n_vars[-1] - 1:
+            raise IndexError("Index out of range.")
+        cons = {'type': 'equality',
+                'fun': lambda z: (z**2).sum() - 1.0}
+        f = lambda a: self.activations(x)[index]
+        x0 = np.zeros(self.n_vars[0])
+        x0[0] = 1.0
+        optimal_input = minimize(f, x0)
