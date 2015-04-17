@@ -129,7 +129,7 @@ class dbn:
         self.rbms_up = []
         self.rbms_down = []
 
-    def fit(self, x, backfit_iterations=100, backfit_rate = 0.001, backfit_gibbs_iterations = 10, n_iterations=100, n_chains = 100, alpha=0.05, lamb=0.05):
+    def fit(self, x, epochs = 1, backfit_iterations=100, backfit_rate = 0.001, backfit_gibbs_iterations = 10, n_iterations=100, n_chains = 100, alpha=0.05, lamb=0.05):
         '''
         Fit a DBN via stochastic maximum likelihood followed by backfitting.
         '''
@@ -138,11 +138,17 @@ class dbn:
         bottom_data = x
 
         # fit the restricted boltzmann machines
-        for i in xrange(self.n_layers-1):
-            an_rbm = rbm(self.n_vars[i],self.n_vars[i+1])
-            an_rbm.fit(bottom_data, n_iterations, n_chains, alpha, lamb)
-            self.rbms.append(an_rbm)
-            bottom_data = probs_to_binary(upsample(an_rbm, bottom_data), an_rbm.dtype)
+        for epoch in range(epochs):
+            bottom_data = x
+            for i in xrange(self.n_layers-1):
+                if epoch == 0:
+                    an_rbm = rbm(self.n_vars[i],self.n_vars[i+1])
+                else:
+                    an_rbm = self.rbms[i]
+                an_rbm.fit(bottom_data, n_iterations, n_chains, alpha, lamb)
+                if epoch == 0:
+                    self.rbms.append(an_rbm)
+                bottom_data = probs_to_binary(upsample(an_rbm, bottom_data), an_rbm.dtype)
 
         # untie weights and backfit
         ## init untied rbms
