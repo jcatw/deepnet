@@ -68,7 +68,7 @@ class rbm:
         '''
         self.n_visible = n_visible
         self.n_hidden = n_hidden
-        self.W = np.zeros((n_visible, n_hidden))
+        self.W = 0.1 * np.random.randn(n_visible, n_hidden)
         self.dtype = dtype
 
     def fit(self, x, n_iterations=100, n_chains = 100, alpha=0.05, lamb=0.05):
@@ -108,11 +108,11 @@ class rbm:
         return samples
             
 class dbn:
-    def __init__(self,n_visible,n_hidden_list):
+    def __init__(self, n_visible, n_hidden_list, dtype=np.dtype('int8')):
         '''
         Initialize a DBN with n_visible hidden variables.  n_hidden_list defines the number of latent layers and their dimensionality.  For instance, to define a DBN with 1000 visible variables and 3 layers with 100 variables each, call dbn(1000, [100,100,100]).
         '''
-        
+        self.dtype = dtype
         self.n_layers = len(n_hidden_list) + 1
         self.n_vars = [n_visible]
         self.n_vars.extend(n_hidden_list)
@@ -142,7 +142,7 @@ class dbn:
             bottom_data = x
             for i in xrange(self.n_layers-1):
                 if epoch == 0:
-                    an_rbm = rbm(self.n_vars[i],self.n_vars[i+1])
+                    an_rbm = rbm(self.n_vars[i],self.n_vars[i+1], dtype=self.dtype)
                 else:
                     an_rbm = self.rbms[i]
                 an_rbm.fit(bottom_data, n_iterations, n_chains, alpha, lamb)
@@ -247,9 +247,11 @@ class dbn:
     def optimal_input(self, index):
         if index < 0 or index > self.n_vars[-1] - 1:
             raise IndexError("Index out of range.")
-        cons = {'type': 'equality',
-                'fun': lambda z: (z**2).sum() - 1.0}
-        f = lambda a: self.activations(x)[index]
+        cons = ({'type': 'eq',
+                'fun': lambda z: np.array([(z**2).sum() - 1.0])},)
+        f = lambda x: -self.activations(x)[index]
         x0 = np.zeros(self.n_vars[0])
         x0[0] = 1.0
-        optimal_input = minimize(f, x0)
+        optimal_input = minimize(f, x0, constraints=cons).x
+
+        return optimal_input
